@@ -1,41 +1,60 @@
+from dd import carve
 import sys
 import os
+import argparse
+import shutil
 
-filename = sys.argv[1]
-jpeg_header = "FFD8FF"
-jpeg_trailer = "FFD9"
-block_counter = 0
-start = 0
-image_num = 0
-header_found = False
 
-with open(filename, "rb") as file:
-    while True:
-        hex_string = ""
-        block = file.read(512)
-        for i in block:
-            hex_string += "%0.2X" % i
+def create_dump_dir(output_dir="output"):
+    if os.path.isdir(output_dir):
+        usr = input("Output directory already exists, do you want to delete \
+            it? [y/n] ").lower()
+        if usr == 'y':
+            shutil.rmtree(output_dir)
+        else:
+            exit()
+    os.mkdir(output_dir)
 
-        if not hex_string:
-            break
 
-        if not header_found and jpeg_header in hex_string:
-            image_num += 1
-            print("=============== Image %i ===============" % image_num)
-            print("JPEG header found in block %i" % block_counter)
-            start = block_counter
-            header_found = True
+def main(filename: str):
+    create_dump_dir()
+    jpeg_header = bytes.fromhex("FFD8FF")
+    jpeg_trailer = bytes.fromhex("FFD9")
+    start = 0
+    image_num = 0
+    header_found = False
+    offset = 0
 
-        if header_found and jpeg_trailer in hex_string:
-            # Ensure trailer is byte-oriented
-            if hex_string.find(jpeg_trailer) % 2 == 0:
-                print("JPEG trailer found in block %i" % block_counter)
-                count = block_counter - start + 1
-                print("Count %i" % (count))
-                os.system("dd if={} of=image{}.jpeg skip={} count={}".format(filename, image_num, start, count))
-                print("Image copied to image%i.jpeg\n=======================================" % image_num)
+    with open(filename, "rb") as file:  # open bin file
+        for i in range(os.path.getsize(filename)):
+            if header_found:  # Getting trailer tag
+                search = file.read(len(jpeg_trailer))  # get tag
+                file.seek((1 - len(jpeg_trailer)), os.SEEK_CUR) # move back
+            else:             # Getting Header tag
+                search = file.read(len(jpeg_header))
+                file.seek((1 - len(jpeg_header)), os.SEEK_CUR)
+            
+            if search == jpeg_header and not header_found:
+                print("Found Header at " + str(i))
+                offset = i              # We found the start header, mark offset
+                header_found = True     # Mark flag, start search for trailer
+
+            elif search == jpeg_trailer and header_found:
+                # disgusting
+                print("Image found at " + "b'" + str(offset) + "' of length " \
+                + "b'" + str(i - offset) + "'\t image" + str(image_num) +".jpg")
+                # i - offset gives file size, +2 for trailer
+                carve(filename, (i - offset + 2), "output/image" +
+                    str(image_num) + ".jpg", offset)
+                image_num += 1
                 header_found = False
 
-        block_counter += 1
 
-print("%i Image(s) Found" % image_num)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='JPEG carving tool')
+    parser.add_argument("filename", type=str,
+        help="File to attempt JPEG extraction on")
+    #parser.add_argument("--output_directory", "-o")
+    args = parser.parse_args()
+    main(args.filename)
+
