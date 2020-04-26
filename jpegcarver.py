@@ -4,6 +4,8 @@ import os
 import argparse
 import shutil
 
+BLOCK = 512
+START = 20  # max length the header could be in the starting block
 
 def create_dump_dir(output_dir="output"):
     if os.path.isdir(output_dir):
@@ -33,8 +35,8 @@ def main(filename: str):
             else:             # Getting Header tag
                 search = file.read(len(jpeg_header))
                 file.seek((1 - len(jpeg_header)), os.SEEK_CUR)
-            
-            if search == jpeg_header and not header_found:
+
+            if search == jpeg_header and not header_found and (i%BLOCK) < START:
                 print("Found Header at " + str(i))
                 offset = i              # We found the start header, mark offset
                 header_found = True     # Mark flag, start search for trailer
@@ -54,7 +56,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='JPEG carving tool')
     parser.add_argument("filename", type=str,
         help="File to attempt JPEG extraction on")
-    #parser.add_argument("--output_directory", "-o")
     args = parser.parse_args()
     main(args.filename)
-
